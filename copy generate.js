@@ -1,3 +1,4 @@
+// Adds a custom menu to the spreadsheet on open
 function onOpen() {
   const ui = SpreadsheetApp.getUi();
   ui.createMenu('Custom Menu')
@@ -5,6 +6,58 @@ function onOpen() {
     .addToUi();
 }
 
+// Automatically generates a document when a new entry is added
+function onEdit(e) {
+  const sheet = e.source.getActiveSheet();
+
+  // Exit if it's not the correct sheet or if the edited range isn't a new row
+  if (sheet.getName() !== "Sheet1") return; // Replace "Sheet1" with your sheet name
+  const editedRow = e.range.getRow();
+  const editedColumn = e.range.getColumn();
+
+  // Check if a new entry was added in a specific column (e.g., Column A)
+  if (editedRow === 1 || editedColumn !== 1) return; // Adjust column as needed
+
+  // Create document
+  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  const rowData = sheet.getRange(editedRow, 1, 1, sheet.getLastColumn()).getValues()[0];
+
+  const { machineNumber, timestamp } = getMachineAndTimestamp(headers, rowData);
+
+  // Create the document
+  const templateDoc = DocumentApp.create(`Machine ${machineNumber} - Generated Report`);
+  const docBody = templateDoc.getBody();
+
+  // Add title (Machine Number as the first header)
+  docBody.appendParagraph(`Machine Number: ${machineNumber}`).setHeading(DocumentApp.ParagraphHeading.HEADING1);
+
+  // Add timestamp as second header
+  docBody.appendParagraph(`Timestamp: ${timestamp}`).setHeading(DocumentApp.ParagraphHeading.HEADING2);
+
+  docBody.appendHorizontalRule();
+
+  // Add non-empty and relevant data to the document, excluding Machine Number and Timestamp
+  for (let i = 0; i < rowData.length; i++) {
+    if (rowData[i] && headers[i].toLowerCase() !== 'report' && headers[i].toLowerCase() !== 'machine' && headers[i].toLowerCase() !== 'timestamp') {
+      docBody.appendParagraph(`${headers[i]}: ${rowData[i]}`);
+      docBody.appendParagraph(''); // Add a blank line after each entry
+    }
+  }
+
+  // Add generation timestamp at the bottom of the document
+  docBody.appendHorizontalRule();
+  docBody.appendParagraph(`Generated on: ${new Date()}`).setHeading(DocumentApp.ParagraphHeading.NORMAL);
+
+  // Get the document URL
+  const docUrl = templateDoc.getUrl();
+
+  // Write the clickable link to column T for the current row
+  const lastColumn = 20; // Adjust column index as needed
+  const linkFormula = `=HYPERLINK("${docUrl}", "Open Document")`;
+  sheet.getRange(editedRow, lastColumn).setFormula(linkFormula);
+}
+
+// Manually triggered document generation
 function createDocumentFromRow() {
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
   const range = sheet.getActiveRange();
@@ -69,6 +122,7 @@ function getMachineAndTimestamp(headers, rowData) {
   return { machineNumber, timestamp };
 }
 
+// Manually copy data to sidebar for sharing
 function copyDocumentData() {
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
   const range = sheet.getActiveRange();
